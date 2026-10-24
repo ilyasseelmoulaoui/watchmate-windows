@@ -20,7 +20,11 @@ import app.agregateur.core.sync.SupabaseClient
 import app.agregateur.core.sync.SupabaseConfig
 import app.agregateur.core.sync.SyncEngine
 import app.agregateur.core.title.TitleService
+import app.agregateur.party.PartyManager
+import app.agregateur.party.VoiceChat
+import app.agregateur.relay.RelayHost
 import app.agregateur.sync.SyncManager
+import app.agregateur.ui.ImageLoader
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
@@ -28,8 +32,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import okhttp3.Cache
 import okhttp3.OkHttpClient
 
 /**
@@ -39,7 +47,22 @@ import okhttp3.OkHttpClient
 class DesktopApp {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val dataDir: File = File(System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"), "WatchMate").also { it.mkdirs() }
+    /** Fil de l'interface : la salle et le vocal y vivent entièrement, comme sur le fil principal d'Android. */
+    val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Langue de l'interface en cours, pour les textes produits hors des écrans. */
+    @Volatile var french: Boolean = true
+
+    private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 8)
+
+    /** Messages courts affichés en bas de la fenêtre (équivalent des toasts Android). */
+    val notices: SharedFlow<String> = _notices.asSharedFlow()
+
+    fun notify(fr: String, en: String) {
+        _notices.tryEmit(if (french) fr else en)
+    }
+
+    val dataDir: File = File(System.getenv("LOCALAPPDATA") ?: System.getProperty("user.home"), "WatchMate").also { it.mkdirs() }
     private val cacheDir: File = File(dataDir, "cache").also { it.mkdirs() }
 
     val addonClient: AddonClient by lazy {
@@ -56,6 +79,15 @@ class DesktopApp {
 
     val settings: SettingsRepository by lazy {
         SettingsRepository(FileSettingsStore(File(dataDir, "settings.json")))
+    }
+
+    val images: ImageLoader by lazy {
+        val http = OkHttpClient.Builder()
+            .cache(Cache(File(cacheDir, "images"), IMAGE_CACHE_BYTES))
+            .callTimeout(30, TimeUnit.SECONDS)
+            .proxySelector(LocalProxySelector)
+            .build()
+        ImageLoader(http)
     }
 
     val catalogs: CatalogService by lazy { CatalogService(addonClient) }
@@ -84,11 +116,27 @@ class DesktopApp {
         SyncManager(account, engine, supabase, library, modules, settings, appScope)
     }
 
+    val relay: RelayHost by lazy { RelayHost(cacheDir) }
+
+    val party: PartyManager by lazy {
+        val realtime = OkHttpClient.Builder().readTimeout(0, TimeUnit.SECONDS).proxySelector(LocalProxySelector).build()
+        PartyManager(account, supabase, supabaseConfig, realtime, mainScope, VoiceChat())
+    }
+
     fun start() {
         runBlocking { settings.load() }
         appScope.launch {
             listOf(async { modules.load() }, async { library.load() }).awaitAll()
             sync.start()
         }
+        mainScope.launch { party.start() }
+    }
+
+    fun close() {
+        runCatching { relay.close() }
+    }
+
+    private companion object {
+        const val IMAGE_CACHE_BYTES = 200L * 1024 * 1024
     }
 }

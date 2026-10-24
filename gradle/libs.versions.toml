@@ -5,6 +5,9 @@ serialization = "1.7.3"
 okhttp = "4.12.0"
 junit = "4.13.2"
 composeMultiplatform = "1.7.1"
+vlcj = "4.8.3"
+libtorrent4j = "2.1.0-39"
+webrtcJava = "0.14.0"
 
 [libraries]
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -14,6 +17,11 @@ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+
+vlcj = { module = "uk.co.caprica:vlcj", version.ref = "vlcj" }
+libtorrent4j = { module = "org.libtorrent4j:libtorrent4j", version.ref = "libtorrent4j" }
+libtorrent4j-windows = { module = "org.libtorrent4j:libtorrent4j-windows", version.ref = "libtorrent4j" }
+webrtc-java = { module = "dev.onvoid.webrtc:webrtc-java", version.ref = "webrtcJava" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
